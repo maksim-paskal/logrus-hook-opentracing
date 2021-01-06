@@ -4,13 +4,13 @@ go get github.com/maksim-paskal/logrus-hook-opentracing
 ```
 
 ## environment
-```
+```bash
 export JAEGER_AGENT_HOST=localhost
 export JAEGER_AGENT_PORT=6831
 ```
 ## usage
 
-```
+```go
 package main
 
 import (
