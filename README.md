@@ -1,11 +1,10 @@
 ## installation
 ```
-go get github.com/maksim-paskal/sentry-logrus-hook
+go get github.com/maksim-paskal/logrus-hook-opentracing
 ```
 
 ## environment
 ```
-export SENTRY_DSN=https://1234@sentry/1
 export JAEGER_AGENT_HOST=localhost
 export JAEGER_AGENT_PORT=6831
 ```
@@ -17,26 +16,48 @@ package main
 import (
 	"errors"
 
-	sentrylogrushook "github.com/maksim-paskal/sentry-logrus-hook"
+	logrushookopentracing "github.com/maksim-paskal/logrus-hook-opentracing"
 	log "github.com/sirupsen/logrus"
+	"github.com/uber/jaeger-client-go"
+	jaegercfg "github.com/uber/jaeger-client-go/config"
+	"github.com/uber/jaeger-lib/metrics"
 )
 
 var ErrTest error = errors.New("test error")
 
 func main() {
-	hook, err := sentrylogrushook.NewHook(sentrylogrushook.SentryLogHookOptions{
-		Release: "test",
-	})
+	hook, err := logrushookopentracing.NewHook(logrushookopentracing.Options{})
 	if err != nil {
 		log.WithError(err).Fatal()
 	}
 
 	log.AddHook(hook)
 
-	log.Info("test info")
-	log.WithError(ErrTest).Warn("test warn")
-	log.WithError(ErrTest).Error("test error")
+	cfg, err := jaegercfg.FromEnv()
+	if err != nil {
+		log.WithError(err).Panic("Could not parse Jaeger env vars")
+	}
 
-	defer hook.Stop()
+	cfg.ServiceName = "test-app"
+	cfg.Sampler.Type = jaeger.SamplerTypeConst
+	cfg.Sampler.Param = 1
+	cfg.Reporter.LogSpans = true
+
+	jMetricsFactory := metrics.NullFactory
+
+	tracer, closer, err := cfg.NewTracer(
+		jaegercfg.Metrics(jMetricsFactory),
+	)
+	if err != nil {
+		log.WithError(err).Panic("Could not create tracer")
+	}
+	defer closer.Close()
+
+	span := tracer.StartSpan("main")
+	defer span.Finish()
+
+	log.Info("test info")
+	log.Warn("test warn")
+	log.WithField(logrushookopentracing.SpanKey, span).WithError(ErrTest).Error("test error")
 }
 ```
